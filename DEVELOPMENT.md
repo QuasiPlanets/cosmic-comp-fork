@@ -208,3 +208,4 @@ testing happens in isolated environments.
 
 - **2026-04-06**: Archived Nix dev environment setup plan to `.cursor/plans-archive/nix-dev-environment-setup.md`.
 - **2026-04-06**: Created Phase 1 sub-agent definition at `.cursor/agents/Phase1-Protocol-Extension.md`. See also [AGENTS.md](AGENTS.md).
+- **2026-04-06**: Phase 1 Protocol Extension complete. Archived plan to `.cursor/plans-archive/phase-1-protocol-extension.md`. Correcting protocols fork to use official remote `git@github.com:QuasiPlanets/cosmic-protocols-fork.git`.

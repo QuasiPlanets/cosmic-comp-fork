@@ -312,7 +312,7 @@ where
         F: for<'a> Fn(&'a Client) -> bool + Send + Sync + Clone + 'static,
     {
         let global = dh.create_global::<D, ZcosmicToplevelInfoV1, _>(
-            3,
+            4,
             ToplevelInfoGlobalData {
                 filter: Box::new(client_filter.clone()),
             },
@@ -537,6 +537,11 @@ where
         {
             states.push(States::Sticky);
         }
+        // Phase 2 will add tiled/floating state via Window trait:
+        // if instance.version() >= zcosmic_toplevel_handle_v1::EVT_STACKING_ORDER_SINCE {
+        //     if window.is_tiled() { states.push(States::Tiled); }
+        //     if window.is_floating() { states.push(States::Floating); }
+        // }
         handle_state.states = Some(states.clone());
 
         let states = states
@@ -614,6 +619,14 @@ where
         }
     }
     handle_state.workspaces = state.workspaces.clone();
+
+    // Phase 2 will send stacking_order when FloatingLayout z-order data is available:
+    // if instance.version() >= zcosmic_toplevel_handle_v1::EVT_STACKING_ORDER_SINCE {
+    //     if let Some(order) = <get stacking order from shell> {
+    //         instance.stacking_order(order);
+    //         changed = true;
+    //     }
+    // }
 
     if changed {
         if instance.version() < zcosmic_toplevel_info_v1::REQ_GET_COSMIC_TOPLEVEL_SINCE {

@@ -721,6 +721,11 @@ impl State {
                 ManagementCapabilities::Maximize,
                 ManagementCapabilities::Minimize,
                 ManagementCapabilities::MoveToWorkspace,
+                ManagementCapabilities::SetPosition,
+                ManagementCapabilities::SetSize,
+                ManagementCapabilities::SetFloating,
+                ManagementCapabilities::SetTiled,
+                ManagementCapabilities::SetStackingOrder,
             ],
             client_not_sandboxed,
         );

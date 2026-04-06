@@ -72,6 +72,41 @@ where
         output: Output,
     ) {
     }
+    fn set_position(
+        &mut self,
+        dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+        x: i32,
+        y: i32,
+    ) {
+    }
+    fn set_size(
+        &mut self,
+        dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+        width: i32,
+        height: i32,
+    ) {
+    }
+    fn set_floating(
+        &mut self,
+        dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+    ) {
+    }
+    fn set_tiled(
+        &mut self,
+        dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+    ) {
+    }
+    fn set_stacking_order(
+        &mut self,
+        dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+        order: u32,
+    ) {
+    }
 }
 
 pub fn toplevel_rectangle_for(
@@ -116,7 +151,7 @@ impl ToplevelManagementState {
         F: for<'a> Fn(&'a Client) -> bool + Send + Sync + 'static,
     {
         let global = dh.create_global::<D, ZcosmicToplevelManagerV1, _>(
-            4,
+            5,
             ToplevelManagerGlobalData {
                 filter: Box::new(client_filter),
             },
@@ -261,6 +296,45 @@ where
                     && let Some(output) = Output::from_resource(&output)
                 {
                     state.move_to_workspace(dh, &window, workspace_handle, output);
+                }
+            }
+            zcosmic_toplevel_manager_v1::Request::SetPosition { toplevel, x, y } => {
+                if let Some(window) =
+                    window_from_handle::<<D as ToplevelInfoHandler>::Window>(toplevel)
+                {
+                    state.set_position(dh, &window, x, y);
+                }
+            }
+            zcosmic_toplevel_manager_v1::Request::SetSize {
+                toplevel,
+                width,
+                height,
+            } => {
+                if let Some(window) =
+                    window_from_handle::<<D as ToplevelInfoHandler>::Window>(toplevel)
+                {
+                    state.set_size(dh, &window, width, height);
+                }
+            }
+            zcosmic_toplevel_manager_v1::Request::SetFloating { toplevel } => {
+                if let Some(window) =
+                    window_from_handle::<<D as ToplevelInfoHandler>::Window>(toplevel)
+                {
+                    state.set_floating(dh, &window);
+                }
+            }
+            zcosmic_toplevel_manager_v1::Request::SetTiled { toplevel } => {
+                if let Some(window) =
+                    window_from_handle::<<D as ToplevelInfoHandler>::Window>(toplevel)
+                {
+                    state.set_tiled(dh, &window);
+                }
+            }
+            zcosmic_toplevel_manager_v1::Request::SetStackingOrder { toplevel, order } => {
+                if let Some(window) =
+                    window_from_handle::<<D as ToplevelInfoHandler>::Window>(toplevel)
+                {
+                    state.set_stacking_order(dh, &window, order);
                 }
             }
             _ => unreachable!(),

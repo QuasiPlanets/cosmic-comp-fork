@@ -259,6 +259,51 @@ impl ToplevelManagementHandler for State {
             shell.toggle_sticky(&seat, &mapped);
         }
     }
+
+    fn set_position(
+        &mut self,
+        _dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+        x: i32,
+        y: i32,
+    ) {
+        tracing::debug!(app_id = %window.app_id(), x, y, "set_position request (Phase 1 no-op)");
+    }
+
+    fn set_size(
+        &mut self,
+        _dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+        width: i32,
+        height: i32,
+    ) {
+        tracing::debug!(app_id = %window.app_id(), width, height, "set_size request (Phase 1 no-op)");
+    }
+
+    fn set_floating(
+        &mut self,
+        _dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+    ) {
+        tracing::debug!(app_id = %window.app_id(), "set_floating request (Phase 1 no-op)");
+    }
+
+    fn set_tiled(
+        &mut self,
+        _dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+    ) {
+        tracing::debug!(app_id = %window.app_id(), "set_tiled request (Phase 1 no-op)");
+    }
+
+    fn set_stacking_order(
+        &mut self,
+        _dh: &DisplayHandle,
+        window: &<Self as ToplevelInfoHandler>::Window,
+        order: u32,
+    ) {
+        tracing::debug!(app_id = %window.app_id(), order, "set_stacking_order request (Phase 1 no-op)");
+    }
 }
 
 impl ManagementWindow for CosmicSurface {
