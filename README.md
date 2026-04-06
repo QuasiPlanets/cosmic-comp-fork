@@ -109,6 +109,14 @@ Historical plans and sub-agent definitions are archived in:
 
 These are read-only snapshots for long-term reference and onboarding.
 
+## Current Status
+
+**Phase 1 (Protocol Extensions) -- Complete.** The `zcosmic_toplevel_manager_v1` protocol has been extended to version 5 with five new requests (`set_position`, `set_size`, `set_floating`, `set_tiled`, `set_stacking_order`) and corresponding capabilities. The `zcosmic_toplevel_handle_v1` protocol has been extended to version 4 with `tiled`/`floating` state flags and a `stacking_order` event. All extensions are version-gated and additive -- existing clients are unaffected. Protocol XML lives in [QuasiPlanets/cosmic-protocols-fork](https://github.com/QuasiPlanets/cosmic-protocols-fork). New requests currently log and no-op; Shell-side implementation is Phase 2.
+
+**Phase 2 (Shell Implementation) -- Next.** Wire the protocol scaffolding to actual window management operations.
+
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the full roadmap and detailed Phase 1 summary.
+
 ## Upstream
 
 This fork tracks [pop-os/cosmic-comp](https://github.com/pop-os/cosmic-comp) master. The base commit is `f0b54315`. All changes are additive protocol extensions and do not modify upstream behavior for unrelated functionality.
