@@ -1,0 +1,95 @@
+---
+description: Core enforcement rules for safe cosmic-comp compositor development
+globs:
+  - "**/*.rs"
+  - "**/*.toml"
+  - "**/*.xml"
+  - "**/*.md"
+alwaysApply: true
+---
+
+# Core Enforcement Rules for cosmic-comp-fork
+
+## 1. Safety-First Mindset
+
+This is a Wayland compositor. A bug here means a black screen, not a dialog box. Every change must be made with the understanding that this code runs as the display server.
+
+- Never modify session-critical code paths (backend initialization, seat management, DRM setup) without explicit review and a clear plan.
+- Never introduce `unwrap()` or `expect()` in code paths reachable during normal compositor operation. Use proper error handling or `if let`.
+- Never add `panic!` or `todo!` in production code paths. These are fatal in a compositor.
+- Prefer `tracing::warn!` or `tracing::error!` with graceful degradation over any form of abort.
+
+## 2. Official Crates Only
+
+The compositor runs with full access to GPU, input devices, and display hardware. Every dependency is part of the trusted computing base.
+
+- Only use well-known, audited crates from crates.io or official System76/Smithay repositories.
+- Never add a dependency without verifying its source, maintenance status, and relevance.
+- Pin all dependency versions. No wildcards in Cargo.toml.
+
+## 3. Strict Isolation of Changes
+
+Our fork extends zcosmic protocols for layout management. We do not modify unrelated compositor subsystems.
+
+- Only modify files listed in ARCHITECTURE.md "Extension Targets" unless the plan explicitly expands scope.
+- Never change rendering, input handling, session management, or backend code unless directly required by a planned protocol extension.
+- Keep all protocol extensions additive -- existing behavior must be preserved for clients that do not use our extensions.
+
+## 4. One-Todo-at-a-Time Discipline
+
+- Complete one task fully before starting the next.
+- Each task should result in code that compiles (`cargo check`) before moving on.
+- Never leave half-implemented protocol requests or partially wired handlers.
+
+## 5. Documentation Policy
+
+- Project documentation (README.md, SAFETY.md, ARCHITECTURE.md, DEVELOPMENT.md) is append-only. Do not delete or rewrite existing sections. Add new sections or update existing content with dated notes.
+- Every new protocol request or event must be documented in ARCHITECTURE.md before implementation begins.
+- Update the "Protocol Gap Analysis" table in ARCHITECTURE.md as gaps are filled.
+
+## 6. Re-Read Before Changes
+
+Before making any code changes in a session:
+- Re-read SAFETY.md for current safety procedures.
+- Re-read ARCHITECTURE.md for the current state of extensions and file targets.
+- Re-read DEVELOPMENT.md for the current phase and its requirements.
+- Check the active plan in .cursor/plans/ if one exists.
+
+## 7. Protocol Extension Conventions
+
+When extending zcosmic protocols:
+
+1. **Design first**: Document the new request/event in ARCHITECTURE.md with name, parameters, and expected behavior.
+2. **Protocol definition**: Update or create protocol XML before writing Rust code.
+3. **State types**: Add new types to `src/wayland/protocols/` following existing patterns.
+4. **Handler implementation**: Wire the new request in `src/wayland/handlers/` following the existing `ToplevelManagementHandler` pattern.
+5. **Shell integration**: Implement the actual window management logic in `src/shell/` through the `Shell` struct.
+6. **Test**: Verify with nested winit (Tier 2) at minimum.
+
+## 8. Testing Requirements
+
+- `cargo check` must pass before any commit.
+- `cargo clippy` must have no new warnings before any commit.
+- Protocol changes must be tested with a client connecting to the nested winit compositor.
+- Changes affecting rendering, input, or session management require Tier 3 testing (separate test user account on a different TTY) -- see SAFETY.md.
+
+## 9. Commit Discipline
+
+- Commit messages must accurately describe what changed and why.
+- Never commit generated files, build artifacts, or user-specific configuration.
+- Never force-push to the master branch.
+- Each commit should leave the project in a buildable state.
+
+## 10. Code Style
+
+- Follow existing cosmic-comp code style and conventions.
+- Use `tracing` for logging (not `println!` or `eprintln!`).
+- Match the existing error handling patterns (especially in protocol handlers).
+- Keep new protocol code structurally parallel to existing zcosmic implementations so the codebase remains navigable.
+
+## 11. Archive Rule for Plans and Sub-Agents
+
+- Whenever a new phase plan is created (any file containing "Phase" and "plan" or "overview:"), immediately copy it to `.cursor/plans-archive/` with a clean readable name (e.g., `phase-1-protocol-extension.md`).
+- Whenever a new sub-agent definition is created in `.cursor/agents/` (any `*-Implementer.md` file), immediately copy it to `.cursor/agents-archive/` with the same filename.
+- Do not delete originals. Archives are read-only historical snapshots.
+- Update DEVELOPMENT.md (append-only) when new archives are added, noting what was archived.

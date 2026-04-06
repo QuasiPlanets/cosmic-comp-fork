@@ -108,8 +108,34 @@
               __concatMap (d: d.runtimeDependencies) (__attrValues self'.checks)
             );
 
-            # include build inputs
             inputsFrom = [ cosmic-comp ];
+
+            # clippy and rustfmt are provided by the rust-overlay toolchain but listed
+            # here explicitly so the devShell's capabilities are visible at a glance.
+            packages = with pkgs; [
+              rust-analyzer
+              clippy
+              rustfmt
+            ];
+
+            shellHook = ''
+              echo ""
+              echo "cosmic-comp-fork development shell"
+              echo "  Rust $(rustc --version | cut -d' ' -f2)  |  $(cargo --version)"
+              echo ""
+              echo "Tier 1 (build):"
+              echo "  cargo check             - type check (fastest feedback)"
+              echo "  cargo build             - debug build"
+              echo "  cargo build --release   - release build (for Tier 3 testing)"
+              echo "  cargo clippy            - lint"
+              echo ""
+              echo "Tier 2 (nested winit):"
+              echo "  COSMIC_BACKEND=winit ./target/debug/cosmic-comp"
+              echo ""
+              echo "Tier 3 reminder: copy release binary to /usr/local/bin/cosmic-comp-fork,"
+              echo "  then test on the separate 'testcomp' user account (see SAFETY.md)"
+              echo ""
+            '';
           };
         };
     };

@@ -14,3 +14,15 @@ vendor.tar
 .vscode
 *.log
 /result
+
+# Cursor IDE: ignore contents of .cursor/ by default (use /* not / so negation patterns work)
+.cursor/*
+
+# Allow specific .cursor/ subdirectories that contain project knowledge and history
+!.cursor/rules/
+!.cursor/agents/
+!.cursor/plans-archive/
+!.cursor/agents-archive/
+
+# Nix
+.direnv
