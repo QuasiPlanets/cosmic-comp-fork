@@ -26,3 +26,6 @@ vendor.tar
 
 # Nix
 .direnv
+
+# Future Features
+TODO-cosmic-comp-&-cosmic-protocols.md
