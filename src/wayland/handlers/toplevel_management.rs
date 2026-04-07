@@ -267,7 +267,8 @@ impl ToplevelManagementHandler for State {
         x: i32,
         y: i32,
     ) {
-        tracing::debug!(app_id = %window.app_id(), x, y, "set_position request (Phase 1 no-op)");
+        let mut shell = self.common.shell.write();
+        shell.set_window_position(window, x, y);
     }
 
     fn set_size(
@@ -277,7 +278,8 @@ impl ToplevelManagementHandler for State {
         width: i32,
         height: i32,
     ) {
-        tracing::debug!(app_id = %window.app_id(), width, height, "set_size request (Phase 1 no-op)");
+        let mut shell = self.common.shell.write();
+        shell.set_window_size(window, width, height);
     }
 
     fn set_floating(
@@ -285,7 +287,8 @@ impl ToplevelManagementHandler for State {
         _dh: &DisplayHandle,
         window: &<Self as ToplevelInfoHandler>::Window,
     ) {
-        tracing::debug!(app_id = %window.app_id(), "set_floating request (Phase 1 no-op)");
+        let mut shell = self.common.shell.write();
+        shell.set_window_floating(window);
     }
 
     fn set_tiled(
@@ -293,7 +296,9 @@ impl ToplevelManagementHandler for State {
         _dh: &DisplayHandle,
         window: &<Self as ToplevelInfoHandler>::Window,
     ) {
-        tracing::debug!(app_id = %window.app_id(), "set_tiled request (Phase 1 no-op)");
+        let mut shell = self.common.shell.write();
+        let seat = shell.seats.last_active().clone();
+        shell.set_window_tiled(window, &seat);
     }
 
     fn set_stacking_order(
@@ -302,7 +307,8 @@ impl ToplevelManagementHandler for State {
         window: &<Self as ToplevelInfoHandler>::Window,
         order: u32,
     ) {
-        tracing::debug!(app_id = %window.app_id(), order, "set_stacking_order request (Phase 1 no-op)");
+        let mut shell = self.common.shell.write();
+        shell.set_window_stacking_order(window, order);
     }
 }
 

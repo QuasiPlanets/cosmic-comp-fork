@@ -72,8 +72,8 @@ use crate::{
         },
         protocols::{
             toplevel_info::{
-                ToplevelInfoState, toplevel_enter_output, toplevel_enter_workspace,
-                toplevel_leave_output, toplevel_leave_workspace,
+                ToplevelInfoState, set_layout_meta, toplevel_enter_output,
+                toplevel_enter_workspace, toplevel_leave_output, toplevel_leave_workspace,
             },
             workspace::{
                 WorkspaceGroupHandle, WorkspaceHandle, WorkspaceState, WorkspaceUpdateGuard,
@@ -1499,6 +1499,53 @@ impl Common {
             &mut self.workspace_state.update(),
         );
         self.popups.cleanup();
+        {
+            let shell = self.shell.read();
+            for toplevel in self.toplevel_info_state.registered_toplevels() {
+                let mut is_floating = false;
+                let mut is_tiled = false;
+                let mut stacking_order = None;
+
+                for set in shell.workspaces.sets.values() {
+                    if set
+                        .sticky_layer
+                        .mapped()
+                        .any(|m| m.windows().any(|(ref s, _)| s == toplevel))
+                    {
+                        is_floating = true;
+                        for (i, elem) in set.sticky_layer.space.elements().enumerate() {
+                            if elem.windows().any(|(ref s, _)| s == toplevel) {
+                                stacking_order = Some(i as u32);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    for workspace in &set.workspaces {
+                        if workspace.is_floating(toplevel) {
+                            is_floating = true;
+                            for (i, elem) in
+                                workspace.floating_layer.space.elements().enumerate()
+                            {
+                                if elem.windows().any(|(ref s, _)| s == toplevel) {
+                                    stacking_order = Some(i as u32);
+                                    break;
+                                }
+                            }
+                            break;
+                        } else if workspace.is_tiled(toplevel) {
+                            is_tiled = true;
+                            break;
+                        }
+                    }
+                    if is_floating || is_tiled {
+                        break;
+                    }
+                }
+
+                set_layout_meta(toplevel, is_floating, is_tiled, stacking_order);
+            }
+        }
         self.toplevel_info_state.refresh(&self.workspace_state);
         self.refresh_idle_inhibit();
         self.a11y_keyboard_monitor_state.refresh();
@@ -4325,6 +4372,191 @@ impl Shell {
         } else {
             None
         }
+    }
+
+    pub fn set_window_position(&mut self, surface: &CosmicSurface, x: i32, y: i32) {
+        let Some(mapped) = self.element_for_surface(surface).cloned() else {
+            tracing::warn!(app_id = %surface.app_id(), "set_position: window not found");
+            return;
+        };
+        let Some(workspace) = self.space_for_mut(&mapped) else {
+            tracing::warn!(app_id = %surface.app_id(), "set_position: workspace not found");
+            return;
+        };
+        if !workspace.is_floating(surface) {
+            tracing::warn!(
+                app_id = %surface.app_id(),
+                "set_position: window is not floating, ignoring"
+            );
+            return;
+        }
+        let Some(current_geo) = workspace.floating_layer.element_geometry(&mapped) else {
+            tracing::warn!(app_id = %surface.app_id(), "set_position: no current geometry");
+            return;
+        };
+
+        let output = workspace.output().clone();
+        let layers = layer_map_for_output(&output);
+        let work_area = layers.non_exclusive_zone().as_local();
+
+        let clamped_x = x.max(work_area.loc.x).min(work_area.loc.x + work_area.size.w - 1);
+        let clamped_y = y.max(work_area.loc.y).min(work_area.loc.y + work_area.size.h - 1);
+        let position = Point::<i32, Local>::from((clamped_x, clamped_y));
+
+        let new_geo = Rectangle::new(position, current_geo.size);
+        mapped.set_geometry(new_geo.to_global(&output));
+        workspace
+            .floating_layer
+            .space
+            .map_element(mapped, position.as_logical(), false);
+    }
+
+    pub fn set_window_size(&mut self, surface: &CosmicSurface, width: i32, height: i32) {
+        if width <= 0 || height <= 0 {
+            tracing::warn!(
+                app_id = %surface.app_id(),
+                width,
+                height,
+                "set_size: invalid dimensions, ignoring"
+            );
+            return;
+        }
+        let Some(mapped) = self.element_for_surface(surface).cloned() else {
+            tracing::warn!(app_id = %surface.app_id(), "set_size: window not found");
+            return;
+        };
+        let Some(workspace) = self.space_for_mut(&mapped) else {
+            tracing::warn!(app_id = %surface.app_id(), "set_size: workspace not found");
+            return;
+        };
+
+        let output = workspace.output().clone();
+        let layers = layer_map_for_output(&output);
+        let work_area = layers.non_exclusive_zone().as_local();
+
+        let min_size = mapped.min_size().unwrap_or((1, 1).into());
+        let max_size = mapped.max_size();
+
+        let mut w = width.max(min_size.w.max(1));
+        let mut h = height.max(min_size.h.max(1));
+
+        if let Some(max) = max_size {
+            if max.w > 0 {
+                w = w.min(max.w);
+            }
+            if max.h > 0 {
+                h = h.min(max.h);
+            }
+        }
+
+        w = w.min(work_area.size.w);
+        h = h.min(work_area.size.h);
+
+        let loc = workspace
+            .floating_layer
+            .element_geometry(&mapped)
+            .or_else(|| workspace.element_geometry(&mapped))
+            .map(|g| g.loc)
+            .unwrap_or_default();
+
+        let size = Size::<i32, Local>::from((w, h));
+        let new_geo = Rectangle::new(loc, size);
+        mapped.set_geometry(new_geo.to_global(&output));
+        mapped.configure();
+
+        if workspace.is_floating(surface) {
+            workspace
+                .floating_layer
+                .space
+                .map_element(mapped, loc.as_logical(), false);
+        }
+    }
+
+    pub fn set_window_floating(&mut self, surface: &CosmicSurface) {
+        let Some(mapped) = self.element_for_surface(surface).cloned() else {
+            tracing::warn!(app_id = %surface.app_id(), "set_floating: window not found");
+            return;
+        };
+        let Some(workspace) = self.space_for_mut(&mapped) else {
+            tracing::warn!(app_id = %surface.app_id(), "set_floating: workspace not found");
+            return;
+        };
+
+        if workspace.is_floating(surface) {
+            return;
+        }
+        if !workspace.tiling_enabled {
+            return;
+        }
+        if !workspace.is_tiled(surface) {
+            return;
+        }
+
+        if mapped.is_maximized(false) {
+            workspace.unmaximize_request(&mapped);
+        }
+        let _ = workspace.tiling_layer.unmap(&mapped, None);
+        workspace.floating_layer.map(mapped, None);
+    }
+
+    pub fn set_window_tiled(&mut self, surface: &CosmicSurface, seat: &Seat<State>) {
+        let Some(mapped) = self.element_for_surface(surface).cloned() else {
+            tracing::warn!(app_id = %surface.app_id(), "set_tiled: window not found");
+            return;
+        };
+        let Some(workspace) = self.space_for_mut(&mapped) else {
+            tracing::warn!(app_id = %surface.app_id(), "set_tiled: workspace not found");
+            return;
+        };
+
+        if workspace.is_tiled(surface) {
+            return;
+        }
+        if !workspace.tiling_enabled {
+            tracing::warn!(
+                app_id = %surface.app_id(),
+                "set_tiled: tiling not enabled on this workspace"
+            );
+            return;
+        }
+        if !workspace.is_floating(surface) {
+            return;
+        }
+
+        if mapped.is_maximized(false) {
+            workspace.unmaximize_request(&mapped);
+        }
+        let focus_stack = workspace.focus_stack.get(seat);
+        workspace.floating_layer.unmap(&mapped, None);
+        workspace
+            .tiling_layer
+            .map(mapped, Some(focus_stack.iter()), None);
+    }
+
+    pub fn set_window_stacking_order(&mut self, surface: &CosmicSurface, _order: u32) {
+        let Some(mapped) = self.element_for_surface(surface).cloned() else {
+            tracing::warn!(
+                app_id = %surface.app_id(),
+                "set_stacking_order: window not found"
+            );
+            return;
+        };
+        let Some(workspace) = self.space_for_mut(&mapped) else {
+            tracing::warn!(
+                app_id = %surface.app_id(),
+                "set_stacking_order: workspace not found"
+            );
+            return;
+        };
+        if !workspace.is_floating(surface) {
+            tracing::warn!(
+                app_id = %surface.app_id(),
+                "set_stacking_order: window is not floating"
+            );
+            return;
+        }
+
+        workspace.floating_layer.space.raise_element(&mapped, true);
     }
 
     pub fn resize_request(

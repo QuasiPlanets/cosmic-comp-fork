@@ -70,6 +70,9 @@ pub(super) struct ToplevelStateInner {
     outputs: Vec<Output>,
     workspaces: Vec<WorkspaceHandle>,
     pub(super) rectangles: Vec<(Weak<WlSurface>, Rectangle<i32, Logical>)>,
+    pub(crate) is_floating: bool,
+    pub(crate) is_tiled: bool,
+    pub(crate) stacking_order: Option<u32>,
 }
 pub(super) type ToplevelState = Mutex<ToplevelStateInner>;
 
@@ -99,6 +102,7 @@ pub struct ToplevelHandleStateInner<W: Window> {
     app_id: String,
     states: Option<Vec<States>>,
     pub(super) window: Option<W>,
+    stacking_order: Option<u32>,
 }
 pub type ToplevelHandleState<W> = Mutex<ToplevelHandleStateInner<W>>;
 
@@ -113,6 +117,7 @@ impl<W: Window> ToplevelHandleStateInner<W> {
             app_id: String::new(),
             states: None,
             window: Some(window.clone()),
+            stacking_order: None,
         })
     }
 
@@ -126,6 +131,7 @@ impl<W: Window> ToplevelHandleStateInner<W> {
             app_id: String::new(),
             states: None,
             window: None,
+            stacking_order: None,
         })
     }
 }
@@ -270,6 +276,21 @@ where
                     .retain(|(_, i)| i != resource);
             }
         }
+    }
+}
+
+pub fn set_layout_meta(
+    toplevel: &impl Window,
+    is_floating: bool,
+    is_tiled: bool,
+    stacking_order: Option<u32>,
+) {
+    if let Some(state) = toplevel.user_data().get::<ToplevelState>()
+        && let Ok(mut inner) = state.lock()
+    {
+        inner.is_floating = is_floating;
+        inner.is_tiled = is_tiled;
+        inner.stacking_order = stacking_order;
     }
 }
 
@@ -513,11 +534,17 @@ where
         changed = true;
     }
 
-    if handle_state.states.as_ref().is_none_or(|states| {
-        (states.contains(&States::Maximized) != window.is_maximized())
-            || (states.contains(&States::Fullscreen) != window.is_fullscreen())
-            || (states.contains(&States::Activated) != window.is_activated())
-            || (states.contains(&States::Minimized) != window.is_minimized())
+    let supports_layout_state =
+        instance.version() >= zcosmic_toplevel_handle_v1::EVT_STACKING_ORDER_SINCE;
+
+    if handle_state.states.as_ref().is_none_or(|old_states| {
+        (old_states.contains(&States::Maximized) != window.is_maximized())
+            || (old_states.contains(&States::Fullscreen) != window.is_fullscreen())
+            || (old_states.contains(&States::Activated) != window.is_activated())
+            || (old_states.contains(&States::Minimized) != window.is_minimized())
+            || (supports_layout_state
+                && (old_states.contains(&States::Tiled) != state.is_tiled
+                    || old_states.contains(&States::Floating) != state.is_floating))
     }) {
         let mut states = Vec::new();
         if window.is_maximized() {
@@ -537,11 +564,14 @@ where
         {
             states.push(States::Sticky);
         }
-        // Phase 2 will add tiled/floating state via Window trait:
-        // if instance.version() >= zcosmic_toplevel_handle_v1::EVT_STACKING_ORDER_SINCE {
-        //     if window.is_tiled() { states.push(States::Tiled); }
-        //     if window.is_floating() { states.push(States::Floating); }
-        // }
+        if supports_layout_state {
+            if state.is_tiled {
+                states.push(States::Tiled);
+            }
+            if state.is_floating {
+                states.push(States::Floating);
+            }
+        }
         handle_state.states = Some(states.clone());
 
         let states = states
@@ -620,13 +650,13 @@ where
     }
     handle_state.workspaces = state.workspaces.clone();
 
-    // Phase 2 will send stacking_order when FloatingLayout z-order data is available:
-    // if instance.version() >= zcosmic_toplevel_handle_v1::EVT_STACKING_ORDER_SINCE {
-    //     if let Some(order) = <get stacking order from shell> {
-    //         instance.stacking_order(order);
-    //         changed = true;
-    //     }
-    // }
+    if supports_layout_state && handle_state.stacking_order != state.stacking_order {
+        handle_state.stacking_order = state.stacking_order;
+        if let Some(order) = state.stacking_order {
+            instance.stacking_order(order);
+            changed = true;
+        }
+    }
 
     if changed {
         if instance.version() < zcosmic_toplevel_info_v1::REQ_GET_COSMIC_TOPLEVEL_SINCE {

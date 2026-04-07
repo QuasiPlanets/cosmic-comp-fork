@@ -7,7 +7,7 @@ This document tracks the phased development plan for cosmic-comp-fork. Each phas
 | Phase | Focus | Status |
 |---|---|---|
 | Phase 1 | Protocol extensions (new requests/events) | **Complete** |
-| Phase 2 | Compositor-side handlers (implement operations in Shell) | Not started |
+| Phase 2 | Compositor-side handlers (implement operations in Shell) | **Complete** |
 | Phase 3 | Integration testing with cosmic-layout-presets client | Not started |
 | Phase 4 | Atomic batch operations (layout transactions) | Not started |
 
@@ -79,6 +79,50 @@ This document tracks the phased development plan for cosmic-comp-fork. Each phas
 - `floating_state` and `stacking_order` events sent on state changes
 
 **Safety gate:** Tier 2 testing for protocol logic. Tier 3 (separate test user) for any changes touching rendering or input focus.
+
+**Detailed plan:** See `.cursor/agents/Phase2-Shell-Implementation.md`.
+
+### Phase 2 Summary (completed 2026-04-07)
+
+**Approach:** Replaced all 5 Phase 1 no-op `tracing::debug!` handlers with real Shell calls, and enabled sending `tiled`/`floating` state flags and `stacking_order` events to clients via a refresh-time LayoutMeta pre-computation approach (Option B from Phase 1 plan).
+
+**Compositor changes** (3 files in `cosmic-comp-fork`, +295/-25 lines):
+
+| File | Change |
+|---|---|
+| `src/shell/mod.rs` | 5 new Shell helper methods + layout metadata pre-computation in `Common::refresh()` |
+| `src/wayland/handlers/toplevel_management.rs` | 5 no-op handlers replaced with real Shell calls |
+| `src/wayland/protocols/toplevel_info.rs` | Added `LayoutMeta` fields to `ToplevelStateInner`, `set_layout_meta()` function, version-gated state/event emission |
+
+**New Shell methods:**
+
+- `set_window_position(surface, x, y)` -- Finds floating window, clamps to output work area, repositions via `Space::map_element` + `set_geometry`. No configure (position-only).
+- `set_window_size(surface, width, height)` -- Rejects non-positive dimensions, clamps to min/max and output bounds, calls `set_geometry` + `configure()` (sends xdg configure to client).
+- `set_window_floating(surface)` -- If tiled and `tiling_enabled`: unmaps from `tiling_layer`, maps to `floating_layer`. Mirrors the tiled-to-floating branch of `toggle_floating_window`.
+- `set_window_tiled(surface, seat)` -- If floating and `tiling_enabled`: unmaps from `floating_layer`, maps to `tiling_layer`. Mirrors the floating-to-tiled branch of `toggle_floating_window`. Warns if tiling disabled.
+- `set_window_stacking_order(surface, order)` -- Raises floating window to top via `space.raise_element`. Full arbitrary z-index reordering deferred to Phase 3/4.
+
+**Info state sending (LayoutMeta approach):**
+
+- Added `is_floating`, `is_tiled`, `stacking_order` fields to `ToplevelStateInner`
+- `set_layout_meta()` function stores per-window layout metadata, called from `Common::refresh()` before `toplevel_info_state.refresh()`
+- Pre-computation iterates all workspaces, queries `is_floating`/`is_tiled`, computes z-index from floating space element order
+- `send_toplevel_to_client` emits version-gated `Tiled`/`Floating` state flags and `stacking_order` event with change tracking
+
+**Technical decisions:**
+
+- Used Option B (refresh-time query) for tiled/floating state — no `Window` trait changes needed
+- `set_stacking_order` implements "raise to top" semantics via `space.raise_element` for Phase 2; full arbitrary reordering deferred
+- `set_position`/`set_size` silently warn and return for tiled windows — client should call `set_floating` first
+- Seat for `set_tiled` obtained via `shell.seats.last_active()` (single-seat assumption, correct for COSMIC)
+- Layout metadata computed every refresh frame for simplicity; optimization deferred to Phase 3 if profiling warrants
+
+**Verification:**
+
+- `cargo check` in `cosmic-comp-fork`: PASS after each step
+- `cargo clippy --all-features -- -D warnings` in `cosmic-comp-fork`: PASS (zero warnings)
+
+**Safety compliance:** No `unwrap()`/`panic!()` in new code, positions/sizes clamped to output bounds, `tiling_enabled` checked, all state/events version-gated, existing behavior completely unchanged.
 
 ## Phase 3: Integration Testing
 
@@ -251,3 +295,5 @@ testing happens in isolated environments.
 - **2026-04-06**: Archived Nix dev environment setup plan to `.cursor/plans-archive/nix-dev-environment-setup.md`.
 - **2026-04-06**: Created Phase 1 sub-agent definition at `.cursor/agents/Phase1-Protocol-Extension.md`. See also [AGENTS.md](AGENTS.md).
 - **2026-04-06**: Phase 1 Protocol Extension complete. Archived plan to `.cursor/plans-archive/phase-1-protocol-extension.md`. Correcting protocols fork to use official remote `git@github.com:QuasiPlanets/cosmic-protocols-fork.git`.
+- **2026-04-07**: Created Phase 2 sub-agent definition at `.cursor/agents/Phase2-Shell-Implementation.md`. Archived to `.cursor/agents-archive/`. Phase 2 plan approved and handed off.
+- **2026-04-07**: Phase 2 Shell Implementation complete. Archived plan to `.cursor/plans-archive/phase-2-shell-implementation.md`.
