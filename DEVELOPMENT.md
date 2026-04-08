@@ -8,7 +8,7 @@ This document tracks the phased development plan for cosmic-comp-fork. Each phas
 |---|---|---|
 | Phase 1 | Protocol extensions (new requests/events) | **Complete** |
 | Phase 2 | Compositor-side handlers (implement operations in Shell) | **Complete** |
-| Phase 3 | Integration testing with cosmic-layout-presets client | Not started |
+| Phase 3 | Integration testing with cosmic-layout-presets client | **Complete** |
 | Phase 4 | Atomic batch operations (layout transactions) | Not started |
 
 ## Phase 1: Protocol Extensions
@@ -134,6 +134,35 @@ This document tracks the phased development plan for cosmic-comp-fork. Each phas
 - Round-trip fidelity: save -> rearrange -> restore produces identical layout
 
 **Safety gate:** Full Tier 3 testing on the separate test user account with real applications.
+
+**Detailed plan:** Archived to `.cursor/plans-archive/phase-3-integration-testing.md` (see Phase 3 Summary below).
+
+### Phase 3 Summary (completed 2026-04-08)
+
+**Approach:** Integrated the [cosmic-layout-presets](https://github.com/QuasiPlanets/cosmic-layout-presets) client with the Phase 1–2 protocol extensions: patch `cosmic-protocols` / `cosmic-client-toolkit` to [QuasiPlanets/cosmic-protocols-fork](https://github.com/QuasiPlanets/cosmic-protocols-fork), extend `ToplevelAction` and the apply/capture paths to use `set_position`, `set_size`, `set_floating`, `set_tiled`, `set_stacking_order`, and consume `tiled`/`floating` state plus `stacking_order` from toplevel info. Work was executed in the client repository (local path `~/QuasiPlanetsRepos/cosmic-layout-presets` during development); **cosmic-comp-fork** compositor source was not modified in Phase 3.
+
+**Client-side changes (summary — see client repo history for full diffs):**
+
+| Area | Change |
+|---|---|
+| Dependencies | `[patch.'https://github.com/pop-os/cosmic-protocols']` (or path dependency) so `cosmic-protocols` and `cosmic-client-toolkit` resolve to the fork with extended XML (manager v5, handle v4). |
+| `wayland_handler.rs` | New `ToplevelAction` variants (`SetPosition`, `SetSize`, `SetFloating`, `SetTiled`, `SetStackingOrder`), dispatch to manager; `ToplevelManagerCapabilities` and `WaylandUpdate::ManagerCapabilities` for capability-gated apply; verification rustdoc for `ToplevelInfoHandler` propagation of full `ToplevelInfo` (including v4 state and `stacking_order`). |
+| `preset_session.rs` | `capture_toplevels`: `"Tiled"` / `"Floating"` and `stacking_order`-aware sort key vs activation fallback; apply: prefer new requests when compositor advertises caps; keep `repeat_unset_sequence_for_floating_or_fullscreen_mismatch`, activation replay delay, `APPLY_POST_LAUNCH_WAIT_MAX` as fallbacks until Phase 4. |
+| `config.rs` | Doc updates for `WindowEntry.state` (e.g. `"Tiled"`) and `stack_order` semantics; serde shape kept backward compatible. |
+
+**Technical notes:**
+
+- Apply path checks compositor-advertised capabilities before sending new manager requests; legacy heuristics remain for older compositors or missing caps.
+- Phase 2 compositor semantics apply: `set_position`/`set_size` for floating windows; `set_stacking_order` is raise-to-top on the floating layer; tiled/floating toggles respect `tiling_enabled`.
+- Optional **cosmic-protocols-fork** / **cctk** adjustments (e.g. `stacking_order` on `ToplevelInfo`, manager bind v5) may exist in the protocols fork clone used by the client patch — keep fork and client `[patch]` in sync when publishing.
+
+**Verification:**
+
+- `cargo check` and `cargo clippy --all-features -- -D warnings` in `cosmic-layout-presets`: **PASS** (zero warnings under `-D warnings`).
+- **Tier 2:** Compositor and client **build** succeeded; nested `COSMIC_BACKEND=winit` compositor **started** and client **connected** to the nested `WAYLAND_DISPLAY` (smoke test). **Full manual** capture → rearrange → apply → visual fidelity check was **not** automated; operators should run the steps in the archived Phase 3 plan (Part F) for definitive round-trip validation.
+- **Tier 3** (separate test user / real session) remains recommended for production-style validation per [SAFETY.md](SAFETY.md).
+
+**Remaining manual follow-up:** Run a **complete Tier 2** interactive session (multiple windows, mixed tiled/floating, stacking) against **cosmic-comp-fork** nested winit when ready; document any fidelity gaps for Phase 4 (atomic transactions).
 
 ## Phase 4: Atomic Batch Operations
 
@@ -297,3 +326,5 @@ testing happens in isolated environments.
 - **2026-04-06**: Phase 1 Protocol Extension complete. Archived plan to `.cursor/plans-archive/phase-1-protocol-extension.md`. Correcting protocols fork to use official remote `git@github.com:QuasiPlanets/cosmic-protocols-fork.git`.
 - **2026-04-07**: Created Phase 2 sub-agent definition at `.cursor/agents/Phase2-Shell-Implementation.md`. Archived to `.cursor/agents-archive/`. Phase 2 plan approved and handed off.
 - **2026-04-07**: Phase 2 Shell Implementation complete. Archived plan to `.cursor/plans-archive/phase-2-shell-implementation.md`.
+- **2026-04-07**: Created Phase 3 sub-agent definition at `.cursor/agents/Phase3-Integration-Testing.md`. Archived snapshot to `.cursor/agents-archive/Phase3-Integration-Testing.md`. Phase 3 Integration Testing plan approved; handoff to Phase3-Integration-Testing sub-agent. See [AGENTS.md](AGENTS.md).
+- **2026-04-08**: Phase 3 Integration Testing complete. Archived plan to `.cursor/plans-archive/phase-3-integration-testing.md`. Phase 3 Summary appended below Phase 3 section in this file. [AGENTS.md](AGENTS.md) Phase 3 sub-agent marked complete.
